@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {initialOrders,initialProducts,advanceOrder,restock,summarize,canAdvance} from '../src/workflows.js';
+const byId=id=>initialOrders.find(o=>o.id===id);
+test('quoted order advances to approved without stock reservation',()=>{const r=advanceOrder(byId('SO-1001'),initialProducts); assert.equal(r.order.stage,'Approved');assert.deepEqual(r.products,initialProducts)});
+test('approved order reserves stock on fulfillment',()=>{const r=advanceOrder(byId('SO-1002'),initialProducts);assert.equal(r.order.stage,'Fulfillment');assert.equal(r.products.find(p=>p.sku==='EQ-104').onHand,4)});
+test('insufficient stock blocks order, preserves product inventory',()=>{const r=advanceOrder(byId('SO-1003'),initialProducts);assert.match(r.error,/Insufficient/);assert.equal(r.order.stage,'Approved');assert.equal(r.products,undefined)});
+test('completed order does not advance',()=>{assert.equal(canAdvance(byId('SO-1005'),initialProducts).ok,false)});
+test('restocking supports previously blocked order',()=>{const next=restock(initialProducts,'ST-210',5);assert.equal(next.find(p=>p.sku==='ST-210').onHand,10);assert.equal(advanceOrder(byId('SO-1003'),next).order.stage,'Fulfillment')});
+test('restock rejects negative and fractional amounts',()=>{assert.throws(()=>restock(initialProducts,'ST-210',-2));assert.throws(()=>restock(initialProducts,'ST-210',1.5))});
+test('summary calculates open pipeline and stock alerts',()=>{const s=summarize(initialOrders,initialProducts);assert.equal(s.total,6);assert.equal(s.fulfilled,1);assert.ok(s.lowStock>=1);assert.ok(s.pipeline>0)});
